@@ -1,4 +1,5 @@
-/*
+"use strict";
+
 var tmi = require("tmi.js");
 
 var client = new tmi.client({
@@ -12,36 +13,12 @@ var client = new tmi.client({
     channels: ["#chilaxdota"]
 });
 
-var viewers = [];
-
-function showViewers() {
-	console.clear();
-	
-	for (var i = 0; i < viewers.length; i++) {
-		console.log(viewers.length);
-		console.log(viewers[i]);
-	}
-}
-
-client.on('connected', function(address, port) {
-	//client.say("chilaxdota", "chilaxbot connected.");
-	
-	setInterval(showViewers, 100);
-});
-
 client.on("join", function (channel, username, self) {
-	if (viewers.indexOf(username) < 0) {
-		viewers.push(username);
-		console.log("new user joined");
-	}
+	console.log("new user joined " + username);
 });
 
 client.on("part", function (channel, username, self) {
-	var index = viewers.indexOf(username);
-	if (index > -1) {
-		viewers.splice(index, 1);
-		console.log("user left");
-	}
+	console.log("new user parted " + username);
 });
 
 client.on("chat", function (channel, userstate, message, self) {
@@ -53,14 +30,47 @@ client.on("chat", function (channel, userstate, message, self) {
 });
 
 client.connect();
-*/
 
-"use strict";
+var currency_amount = 1,
+handout_timer = 300000;
 
-var api = new (require('./lib/api.js'))();
-
-api.get_chatters([ "chilaxdota", "chilady", "5up__" ]).then((chatters) => {
-	console.log(chatters);
+var db = new (require('./lib/mysql.js'))({
+	host     : "dd18504.kasserver.com",
+	user     : "d02abff8",
+	password : "GV9otLHEb6eUs72q",
+	database : "d02abff8"
 });
+var api = new (require('./lib/api.js'))(db);
 
+function insert_coins() {
+    api.get_chatters().then((chatters) => {
+        console.log("Active chatters: ");
+        console.log(chatters);
+    
+        var sql = '';
+        for (var i = 0; i < chatters.length; i++) {
+            if (chatters[i] !== '') {
+                if (i != chatters.length - 1) {
+                    sql += 'INSERT INTO viewers (name, points) ';
+                    sql += 'VALUES (\'' + chatters[i] + '\', ' + currency_amount + ') ';
+                    sql += 'ON DUPLICATE KEY UPDATE points = points + ' + currency_amount + '; ';
+                } else {
+                    sql += 'INSERT INTO viewers (name, points) ';
+                    sql += 'VALUES (\'' + chatters[i] + '\', ' + currency_amount + ') ';
+                    sql += 'ON DUPLICATE KEY UPDATE points = points + ' + currency_amount;
+                }
+            }
+        }
+    
+        db.execute(sql).then(() => {
+            console.log("Succesfully added points to all users in chat.");
 
+            //Repeat all 5 minutes
+            setTimeout(insert_coins, handout_timer);
+        });
+    });
+}
+
+db.start().then(() => {
+    insert_coins();
+});
